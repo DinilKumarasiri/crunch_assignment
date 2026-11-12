@@ -1,24 +1,36 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense } from 'react'
+import { Navigate, Route, Routes } from 'react-router'
+import { HomeRedirect, RequireAuth } from './auth/RequireAuth'
+import Layout from './components/Layout'
+import LoginPage from './pages/LoginPage'
 
-function App() {
-  const [status, setStatus] = useState('checking...')
+// Code splitting: each page is downloaded only when first visited.
+// Employees never download the manager screens at all.
+const PolicyPage = lazy(() => import('./pages/PolicyPage'))
+const MyBreaksPage = lazy(() => import('./pages/MyBreaksPage'))
+const ApprovalQueuePage = lazy(() => import('./pages/ApprovalQueuePage'))
+const RegisterPage = lazy(() => import('./pages/RegisterPage'))
 
-  useEffect(() => {
-    // Relative URL → goes to localhost:5173 → Vite proxies it to Django
-    fetch('/api/health/')
-      .then((res) => res.json())
-      .then((data) => setStatus(data.status))
-      .catch(() => setStatus('backend unreachable'))
-  }, []) // [] = run once, when the component first appears
-
+export default function App() {
   return (
-    <main style={{ fontFamily: 'sans-serif', padding: 24 }}>
-      <h1>Break Management</h1>
-      <p>
-        Backend status: <strong>{status}</strong>
-      </p>
-    </main>
+    <Suspense fallback={<p className="muted">Loading…</p>}>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route
+          element={
+            <RequireAuth>
+              <Layout />
+            </RequireAuth>
+          }
+        >
+          <Route index element={<HomeRedirect />} />
+          <Route path="my-breaks" element={<RequireAuth role="EMPLOYEE"><MyBreaksPage /></RequireAuth>} />
+          <Route path="policy" element={<RequireAuth role="MANAGER"><PolicyPage /></RequireAuth>} />
+          <Route path="queue" element={<RequireAuth role="MANAGER"><ApprovalQueuePage /></RequireAuth>} />
+          <Route path="register" element={<RequireAuth role="MANAGER"><RegisterPage /></RequireAuth>} />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </Suspense>
   )
 }
-
-export default App
