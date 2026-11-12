@@ -4,7 +4,10 @@ import urllib.request
 
 BASE = "http://127.0.0.1:8000/api"
 
+last_headers = {}
+
 def call(method, path, token=None, body=None):
+    global last_headers
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(BASE + path, data=data, method=method,
                                  headers={"Content-Type": "application/json",
@@ -13,9 +16,10 @@ def call(method, path, token=None, body=None):
         req.add_header("Authorization", f"Bearer {token}")
     try:
         with urllib.request.urlopen(req) as res:
-            status, raw = res.status, res.read()
+            status, raw, headers = res.status, res.read(), res.headers
     except urllib.error.HTTPError as err:
-        status, raw = err.code, err.read()
+        status, raw, headers = err.code, err.read(), err.headers
+    last_headers = dict(headers)
 
     try:
         return status, json.loads(raw or b"null")

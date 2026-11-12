@@ -1,18 +1,26 @@
 from django.db import transaction
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import generics, status
+from rest_framework.exceptions import NotFound
 from rest_framework.permissions import SAFE_METHODS
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
+from accounts.mixins import TenantScopedQuerysetMixin
 from accounts.permissions import IsEmployee, IsManager, IsTenantUser
 
 from .exceptions import Conflict
+from .filters import BreakRequestFilter, StableOrderingFilter
 from .models import BreakPolicy, BreakRequest
 from .serializers import (
     BreakPolicySerializer,
     BreakRequestCreateSerializer,
     BreakRequestSerializer,
+    BulkReviewSerializer,
+    QueueItemSerializer,
+    ReviewSerializer,
 )
-from .services import submit_break_request
+from .services import review_break_requests, submit_break_request
 
 
 class BreakPolicyView(generics.RetrieveUpdateAPIView):
@@ -93,3 +101,69 @@ class MyBreakRequestListCreateView(generics.ListCreateAPIView):
             BreakRequestSerializer(break_request).data,
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
+
+
+QUEUE_FIELDS = [
+    "id", "break_date", "start_at", "end_at", "duration_minutes", "status",
+    "review_note", "reviewed_at", "created_at",
+    "employee", "employee__first_name", "employee__last_name", "employee__username",
+]
+
+
+class ApprovalQueueView(TenantScopedQuerysetMixin, generics.ListAPIView):
+    """GET /api/break-requests/ - the manager's queue for their organisation."""
+
+    permission_classes = [IsManager]
+    serializer_class = QueueItemSerializer
+    filter_backends = [DjangoFilterBackend, StableOrderingFilter]
+    filterset_class = BreakRequestFilter
+    ordering_fields = ["start_at", "created_at", "duration_minutes", "employee__last_name"]
+    ordering = ["start_at"]  # default: soonest first
+    queryset = BreakRequest.objects.select_related("employee").only(*QUEUE_FIELDS)
+
+
+class ReviewBreakRequestView(APIView):
+    """POST /api/break-requests/<id>/approve/ or /reject/"""
+
+    permission_classes = [IsManager]
+    review_action = None  # set in urls.py: "approve" or "reject"
+
+    def post(self, request, pk):
+        serializer = ReviewSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        _, skipped = review_break_requests(
+            manager=request.user,
+            ids=[pk],
+            approve=self.review_action == "approve",
+            note=serializer.validated_data["note"],
+        )
+        if skipped.get(pk) == "not_found":
+            raise NotFound("Break request not found.")
+        if pk in skipped:
+            raise Conflict(f"This request is {skipped[pk].replace('_', ' ')}.")
+
+        item = BreakRequest.objects.select_related("employee").only(*QUEUE_FIELDS).get(pk=pk)
+        return Response(QueueItemSerializer(item).data)
+
+
+class BulkReviewView(APIView):
+    """POST /api/break-requests/bulk-review/  {"ids": [...], "action": "approve"|"reject"}"""
+
+    permission_classes = [IsManager]
+
+    def post(self, request):
+        serializer = BulkReviewSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        processed, skipped = review_break_requests(
+            manager=request.user,
+            ids=data["ids"],
+            approve=data["action"] == "approve",
+            note=data["note"],
+        )
+        return Response({
+            "processed": processed,
+            "skipped": [{"id": pk, "reason": reason} for pk, reason in skipped.items()],
+        })

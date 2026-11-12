@@ -19,7 +19,7 @@ def _violated_constraint(exc):
     return getattr(diag, "constraint_name", None)
 
 
-def _local_day_bounds(day):
+def local_day_bounds(day):
     """[start, end) of a calendar day in the project time zone, as aware datetimes."""
     start = timezone.make_aware(datetime.combine(day, time.min))
     end = timezone.make_aware(datetime.combine(day + timedelta(days=1), time.min))
@@ -44,7 +44,7 @@ def _validate_against_policy(employee, policy, start_at, duration_minutes):
         raise ValidationError(errors)
 
     # Rules 3 & 4: ONE aggregate query gives both the count and the minutes used.
-    day_start, day_end = _local_day_bounds(timezone.localdate(start_at))
+    day_start, day_end = local_day_bounds(timezone.localdate(start_at))
     totals = BreakRequest.objects.filter(
         employee=employee,
         status__in=ACTIVE_STATUSES,
@@ -118,4 +118,47 @@ def submit_break_request(*, employee, start_at, duration_minutes, client_request
 
     return break_request, True
 
-    
+
+def review_break_requests(*, manager, ids, approve, note=""):
+    """
+    Approve or reject PENDING requests belonging to the manager's organisation.
+
+    Returns (processed_ids, skipped) where skipped maps id -> reason:
+      "not_found"                         - doesn't exist OR belongs to another org (no leak)
+      "already_approved" / "already_rejected"
+    """
+    ids = list(dict.fromkeys(ids))  # remove duplicates, keep order
+    new_status = BreakRequest.Status.APPROVED if approve else BreakRequest.Status.REJECTED
+    now = timezone.now()
+
+    with transaction.atomic():
+        # Lock the requested rows in a consistent order (by id) to avoid deadlocks.
+        rows = list(
+            BreakRequest.objects
+            .filter(organisation_id=manager.organisation_id, id__in=ids)  # tenant-scoped
+            .select_for_update()
+            .order_by("id")
+            .values_list("id", "status")
+        )
+        current_status = dict(rows)
+        pending_ids = [pk for pk, st in rows if st == BreakRequest.Status.PENDING]
+
+        # TODO (Step 11): when approving, enforce policy.max_concurrent_breaks here.
+
+        if pending_ids:
+            # ONE UPDATE for all rows. .update() skips save(), so set updated_at ourselves.
+            BreakRequest.objects.filter(id__in=pending_ids).update(
+                status=new_status,
+                reviewed_by=manager,
+                reviewed_at=now,
+                review_note=note,
+                updated_at=now,
+            )
+
+    skipped = {}
+    for pk in ids:
+        if pk not in current_status:
+            skipped[pk] = "not_found"
+        elif current_status[pk] != BreakRequest.Status.PENDING:
+            skipped[pk] = f"already_{current_status[pk].lower()}"
+    return pending_ids, skipped

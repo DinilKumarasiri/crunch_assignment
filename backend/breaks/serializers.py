@@ -76,3 +76,29 @@ class BreakRequestCreateSerializer(serializers.Serializer):
         naive = datetime.combine(attrs["date"], start_time)
         attrs["start_at"] = timezone.make_aware(naive)  # interpret in the project time zone
         return attrs
+
+
+class QueueItemSerializer(BreakRequestSerializer):
+    """A break request as the manager sees it: includes the employee."""
+
+    employee_id = serializers.IntegerField(read_only=True)
+    employee_name = serializers.SerializerMethodField()
+
+    class Meta(BreakRequestSerializer.Meta):
+        fields = BreakRequestSerializer.Meta.fields + ["employee_id", "employee_name"]
+        read_only_fields = fields
+
+    def get_employee_name(self, obj):
+        return obj.employee.get_full_name() or obj.employee.username
+
+
+class ReviewSerializer(serializers.Serializer):
+    note = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
+
+
+class BulkReviewSerializer(serializers.Serializer):
+    ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1), min_length=1, max_length=100
+    )
+    action = serializers.ChoiceField(choices=["approve", "reject"])
+    note = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")

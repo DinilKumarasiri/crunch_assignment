@@ -50,6 +50,9 @@ INSTALLED_APPS = [
 AUTH_USER_MODEL = "accounts.User"
 
 MIDDLEWARE = [
+    "config.middleware.QueryCountMiddleware",
+    "django.middleware.security.SecurityMiddleware",
+
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -160,6 +163,8 @@ REST_FRAMEWORK = {
     + (["rest_framework.renderers.BrowsableAPIRenderer"] if DEBUG else []),
 
     "EXCEPTION_HANDLER": "config.exception_handler.api_exception_handler",
+
+    "DEFAULT_PAGINATION_CLASS": "config.pagination.StandardPagination",
 }
 
 SIMPLE_JWT = {
