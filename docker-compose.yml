@@ -1,0 +1,27 @@
+services:
+  db:
+    image: postgres:16            # official Postgres image from Docker Hub
+    env_file: .env                # Postgres reads POSTGRES_DB/USER/PASSWORD to set itself up
+    volumes:
+      - pgdata:/var/lib/postgresql/data   # keep DB data even if the container is deleted
+    ports:
+      - "5433:5432"               # laptop port 5433 → container port 5432
+    healthcheck:                  # lets other services wait until Postgres is really ready
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend              # build the image from backend/Dockerfile
+    env_file: .env
+    volumes:
+      - ./backend:/app            # live-sync your code into the container
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy   # don't start Django until Postgres passes its healthcheck
+
+volumes:
+  pgdata:                         # a named volume that Docker manages
