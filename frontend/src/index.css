@@ -42,3 +42,37 @@ th { background: #f9fafb; font-weight: 600; }
 .badge.PENDING { background: #fef3c7; color: #92400e; }
 .badge.APPROVED { background: #d1fae5; color: #065f46; }
 .badge.REJECTED { background: #fee2e2; color: #991b1b; }
+
+
+h2 { font-size: 1.05rem; margin: 0; }
+.stack { display: grid; gap: 1rem; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1rem; }
+.form-grid .full { grid-column: 1 / -1; }
+.inline-fields { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; }
+.two-col { display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; align-items: start; }
+@media (max-width: 800px) { .two-col, .inline-fields { grid-template-columns: 1fr; } }
+.checkbox { display: flex; align-items: center; gap: 0.5rem; }
+.actions { display: flex; gap: 0.5rem; }
+.section-head { display: flex; align-items: center; justify-content: space-between; }
+.banner { display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  padding: 0.75rem 1rem; border-radius: 6px; font-size: 0.9rem; }
+.banner.success { background: #d1fae5; color: #065f46; }
+.banner.warning { background: #fef3c7; color: #92400e; }
+.tabs { display: flex; gap: 0.25rem; }
+.tabs button { background: #fff; color: #374151; border: 1px solid #d1d5db; }
+.tabs button.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+.pagination { display: flex; align-items: center; justify-content: flex-end; gap: 0.75rem; }
+.is-fetching { opacity: 0.6; transition: opacity 0.15s; }
+input[aria-invalid='true'] { border-color: var(--danger); }
+.rules { margin: 0; padding-left: 1.1rem; display: grid; gap: 0.35rem; font-size: 0.9rem; }
+
+
+.toolbar { display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: end; }
+.toolbar input[type='search'] { min-width: 240px; }
+.bulk-bar { display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 1rem;
+  background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; }
+button.sort { background: none; color: inherit; padding: 0; font-weight: 600; }
+tr.selected { background: #eff6ff; }
+.row-actions { display: flex; gap: 0.4rem; }
+.row-actions button { padding: 0.3rem 0.6rem; font-size: 0.8rem; }
+.col-check { width: 2rem; }
