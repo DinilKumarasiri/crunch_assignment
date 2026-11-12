@@ -1,13 +1,18 @@
 from django.db import transaction
-from rest_framework import generics
+from rest_framework import generics, status
 from rest_framework.permissions import SAFE_METHODS
 from rest_framework.response import Response
 
-from accounts.permissions import IsManager, IsTenantUser
+from accounts.permissions import IsEmployee, IsManager, IsTenantUser
 
 from .exceptions import Conflict
-from .models import BreakPolicy
-from .serializers import BreakPolicySerializer
+from .models import BreakPolicy, BreakRequest
+from .serializers import (
+    BreakPolicySerializer,
+    BreakRequestCreateSerializer,
+    BreakRequestSerializer,
+)
+from .services import submit_break_request
 
 
 class BreakPolicyView(generics.RetrieveUpdateAPIView):
@@ -53,3 +58,38 @@ class BreakPolicyView(generics.RetrieveUpdateAPIView):
             serializer.save(updated_by=request.user, version=policy.version + 1)
 
         return Response(serializer.data)
+
+
+class MyBreakRequestListCreateView(generics.ListCreateAPIView):
+    """
+    GET  /api/my/break-requests/  - the employee's own history (?status=PENDING etc.)
+    POST /api/my/break-requests/  - submit a new break request
+    """
+
+    permission_classes = [IsEmployee]
+    serializer_class = BreakRequestSerializer
+    filterset_fields = ["status"]
+
+    def get_queryset(self):
+        # Scoped to the employee themself. This is stricter than organisation scoping.
+        return (
+            BreakRequest.objects
+            .filter(employee_id=self.request.user.id)
+            .order_by("-start_at", "-id")
+        )
+
+    def create(self, request, *args, **kwargs):
+        input_serializer = BreakRequestCreateSerializer(data=request.data)
+        input_serializer.is_valid(raise_exception=True)
+        data = input_serializer.validated_data
+
+        break_request, created = submit_break_request(
+            employee=request.user,
+            start_at=data["start_at"],
+            duration_minutes=data["duration_minutes"],
+            client_request_id=data.get("client_request_id"),
+        )
+        return Response(
+            BreakRequestSerializer(break_request).data,
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )

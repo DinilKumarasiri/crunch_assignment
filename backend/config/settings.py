@@ -158,6 +158,8 @@ REST_FRAMEWORK = {
     # JSON only; the clickable browsable API is enabled in development only.
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"]
     + (["rest_framework.renderers.BrowsableAPIRenderer"] if DEBUG else []),
+
+    "EXCEPTION_HANDLER": "config.exception_handler.api_exception_handler",
 }
 
 SIMPLE_JWT = {

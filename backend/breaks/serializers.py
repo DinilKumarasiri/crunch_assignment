@@ -1,6 +1,10 @@
 from rest_framework import serializers
 
-from .models import BreakPolicy
+from datetime import datetime
+
+from django.utils import timezone
+
+from .models import BreakPolicy, BreakRequest
 
 
 class BreakPolicySerializer(serializers.ModelSerializer):
@@ -44,4 +48,31 @@ class BreakPolicySerializer(serializers.ModelSerializer):
         )
         if errors:
             raise serializers.ValidationError(errors)
+        return attrs
+
+
+class BreakRequestSerializer(serializers.ModelSerializer):
+    """Output: how a break request looks in API responses."""
+
+    class Meta:
+        model = BreakRequest
+        fields = [
+            "id", "break_date", "start_at", "end_at", "duration_minutes",
+            "status", "review_note", "reviewed_at", "created_at",
+        ]
+        read_only_fields = fields
+
+
+class BreakRequestCreateSerializer(serializers.Serializer):
+    """Input: what an employee sends to submit a break."""
+
+    date = serializers.DateField()
+    start_time = serializers.TimeField()
+    duration_minutes = serializers.IntegerField(min_value=1, max_value=1440)
+    client_request_id = serializers.UUIDField(required=False, allow_null=True)
+
+    def validate(self, attrs):
+        start_time = attrs["start_time"].replace(second=0, microsecond=0)
+        naive = datetime.combine(attrs["date"], start_time)
+        attrs["start_at"] = timezone.make_aware(naive)  # interpret in the project time zone
         return attrs
