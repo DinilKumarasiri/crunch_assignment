@@ -31,6 +31,7 @@ class BreakPolicy(models.Model):
     min_advance_notice_minutes = models.PositiveIntegerField(default=30)
     max_concurrent_breaks = models.PositiveSmallIntegerField(default=5)
     requires_approval = models.BooleanField(default=True)
+    version = models.PositiveIntegerField(default=1)  # optimistic locking
 
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
@@ -69,13 +70,29 @@ class BreakPolicy(models.Model):
     def __str__(self):
         return f"Policy for {self.organisation}"
 
-    def clean(self):
-        """Cross-field validation (rules that involve more than one field)."""
+    # def clean(self):
+    #     """Cross-field validation (rules that involve more than one field)."""
+    #     errors = {}
+    #     if self.min_duration_minutes > self.max_duration_minutes:
+    #         errors["min_duration_minutes"] = "Must not exceed the maximum duration."
+    #     if self.max_duration_minutes > self.max_daily_minutes:
+    #         errors["max_duration_minutes"] = "A single break cannot exceed the daily allowance."
+    #     if errors:
+    #         raise ValidationError(errors)
+    @staticmethod
+    def cross_field_errors(min_duration, max_duration, max_daily):
+        """Rules involving several fields. Shared by Model.clean() and the API serializer."""
         errors = {}
-        if self.min_duration_minutes > self.max_duration_minutes:
+        if min_duration is not None and max_duration is not None and min_duration > max_duration:
             errors["min_duration_minutes"] = "Must not exceed the maximum duration."
-        if self.max_duration_minutes > self.max_daily_minutes:
+        if max_duration is not None and max_daily is not None and max_duration > max_daily:
             errors["max_duration_minutes"] = "A single break cannot exceed the daily allowance."
+        return errors
+
+    def clean(self):
+        errors = self.cross_field_errors(
+            self.min_duration_minutes, self.max_duration_minutes, self.max_daily_minutes
+        )
         if errors:
             raise ValidationError(errors)
 

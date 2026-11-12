@@ -16,8 +16,7 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.http import JsonResponse
-from django.urls import path
-
+from django.urls import include, path
 
 def health(request):
     """Simple endpoint to confirm the API is reachable."""
@@ -27,4 +26,6 @@ def health(request):
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("api/health/", health),
+    path("api/", include("accounts.urls")),
+    path("api/", include("breaks.urls")),
 ]
