@@ -1,5 +1,7 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
+from django.db.models import Q
+
 
 
 class Organisation(models.Model):
@@ -22,20 +24,31 @@ class User(AbstractUser):
         MANAGER = "MANAGER", "Manager"
         EMPLOYEE = "EMPLOYEE", "Employee"
 
-    # null=True only so that superusers (site admins) can exist without a tenant.
-    # Step 5 adds a DB rule: normal users MUST have an organisation.
     organisation = models.ForeignKey(
         Organisation,
         on_delete=models.PROTECT,
         related_name="users",
         null=True,
         blank=True,
+        db_index=False,  # covered by the (organisation, role) index below
     )
     role = models.CharField(
         max_length=10,
         choices=Role.choices,
         default=Role.EMPLOYEE,
     )
+
+    class Meta(AbstractUser.Meta):
+        indexes = [
+            models.Index(fields=["organisation", "role"], name="user_org_role_idx"),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(is_superuser=True) | Q(organisation__isnull=False),
+                name="user_requires_organisation",
+                violation_error_message="Non-admin users must belong to an organisation.",
+            ),
+        ]
 
     @property
     def is_manager(self):

@@ -1,10 +1,20 @@
 from datetime import timedelta
 
 from django.conf import settings
+from django.contrib.postgres.constraints import ExclusionConstraint
+from django.contrib.postgres.fields import DateTimeRangeField, RangeBoundary, RangeOperators
+from django.contrib.postgres.indexes import GistIndex
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import F, Func, Q
 from django.utils import timezone
 
+
+class TsTzRange(Func):
+    """SQL: TSTZRANGE(start_at, end_at, '[)') - a time period as one value."""
+
+    function = "TSTZRANGE"
+    output_field = DateTimeRangeField()
 
 class BreakPolicy(models.Model):
     """Break rules for one organisation. Configured by managers (Screen 1)."""
@@ -33,6 +43,28 @@ class BreakPolicy(models.Model):
 
     class Meta:
         verbose_name_plural = "break policies"
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(min_duration_minutes__gte=1),
+                name="policy_min_duration_gte_1",
+            ),
+            models.CheckConstraint(
+                condition=Q(min_duration_minutes__lte=F("max_duration_minutes")),
+                name="policy_min_lte_max_duration",
+            ),
+            models.CheckConstraint(
+                condition=Q(max_duration_minutes__lte=F("max_daily_minutes")),
+                name="policy_max_duration_lte_daily",
+            ),
+            models.CheckConstraint(
+                condition=Q(max_requests_per_day__gte=1),
+                name="policy_requests_per_day_gte_1",
+            ),
+            models.CheckConstraint(
+                condition=Q(max_concurrent_breaks__gte=1),
+                name="policy_concurrent_gte_1",
+            ),
+        ]
 
     def __str__(self):
         return f"Policy for {self.organisation}"
@@ -61,11 +93,13 @@ class BreakRequest(models.Model):
         "accounts.Organisation",
         on_delete=models.PROTECT,
         related_name="break_requests",
+        db_index=False,  # covered by composite indexes starting with organisation
     )
     employee = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.PROTECT,
         related_name="break_requests",
+        db_index=False,  # covered by the (employee, start_at) index
     )
 
     # Time fields. end_at and break_date are derived (design decision #3).
@@ -97,7 +131,53 @@ class BreakRequest(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    # NOTE: deliberately no Meta.ordering (design decision #7).
+    class Meta:
+        # Still no `ordering` on purpose (see Step 4, decision #7).
+        indexes = [
+            # Screen 2 history + per-employee policy checks
+            models.Index(fields=["employee", "start_at"], name="breakreq_emp_start_idx"),
+            # Screen 3 queue with no status filter
+            models.Index(fields=["organisation", "start_at"], name="breakreq_org_start_idx"),
+            # Screen 3 queue by status + Screen 4 register/stats (status=APPROVED)
+            models.Index(
+                fields=["organisation", "status", "start_at"],
+                name="breakreq_org_status_start_idx",
+            ),
+            # "Who is on break at time T" + max concurrent check, approved rows only
+            GistIndex(
+                F("organisation"),
+                TsTzRange("start_at", "end_at", RangeBoundary()),
+                name="breakreq_approved_period_gist",
+                condition=Q(status="APPROVED"),
+            ),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(duration_minutes__gt=0),
+                name="breakreq_duration_positive",
+            ),
+            models.CheckConstraint(
+                condition=Q(end_at__gt=F("start_at")),
+                name="breakreq_end_after_start",
+            ),
+            # Duplicate submissions (double-click / network retry)
+            models.UniqueConstraint(
+                fields=["employee", "client_request_id"],
+                condition=Q(client_request_id__isnull=False),
+                name="breakreq_unique_client_request",
+                violation_error_message="This request has already been submitted.",
+            ),
+            # Overlapping requests, enforced by Postgres even under race conditions
+            ExclusionConstraint(
+                name="breakreq_no_overlap_per_employee",
+                expressions=[
+                    ("employee", RangeOperators.EQUAL),
+                    (TsTzRange("start_at", "end_at", RangeBoundary()), RangeOperators.OVERLAPS),
+                ],
+                condition=Q(status__in=["PENDING", "APPROVED"]),
+                violation_error_message="You already have a break that overlaps this time.",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.employee_id} @ {self.start_at:%Y-%m-%d %H:%M} ({self.status})"
