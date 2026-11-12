@@ -10,6 +10,10 @@ DEMO_ORGS = {
     "Acme Ltd": "acme",
     "Globex Corp": "globex",
 }
+EMPLOYEE_NAMES = [
+    ("Eric", "Employee"), ("Emma", "Employee"), ("Ethan", "Employee"),
+    ("Eva", "Employee"), ("Elijah", "Employee"), ("Ella", "Employee"),
+]
 
 
 class Command(BaseCommand):
@@ -21,10 +25,9 @@ class Command(BaseCommand):
             org, _ = Organisation.objects.get_or_create(name=org_name)
             BreakPolicy.objects.get_or_create(organisation=org)
 
-            people = [
-                (f"{prefix}_manager", User.Role.MANAGER, "Maria", "Manager"),
-                (f"{prefix}_emp1", User.Role.EMPLOYEE, "Eric", "Employee"),
-                (f"{prefix}_emp2", User.Role.EMPLOYEE, "Emma", "Employee"),
+            people = [(f"{prefix}_manager", User.Role.MANAGER, "Maria", "Manager")] + [
+                (f"{prefix}_emp{i}", User.Role.EMPLOYEE, first, last)
+                for i, (first, last) in enumerate(EMPLOYEE_NAMES, start=1)
             ]
             for username, role, first, last in people:
                 user, created = User.objects.get_or_create(

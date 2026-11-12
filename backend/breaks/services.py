@@ -1,14 +1,18 @@
 from datetime import datetime, time, timedelta
+from functools import reduce
+from operator import or_
 
+from django.contrib.postgres.fields import RangeBoundary
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Sum
+from django.db.backends.postgresql.psycopg_any import DateTimeTZRange
+from django.db.models import Count, Q, Sum
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
 from accounts.models import User
 
 from .exceptions import Conflict
-from .models import BreakPolicy, BreakRequest
+from .models import BreakPolicy, BreakRequest, TsTzRange
 
 ACTIVE_STATUSES = [BreakRequest.Status.PENDING, BreakRequest.Status.APPROVED]
 
@@ -25,6 +29,59 @@ def local_day_bounds(day):
     end = timezone.make_aware(datetime.combine(day + timedelta(days=1), time.min))
     return start, end
 
+def peak_concurrency(intervals, window_start, window_end):
+    """
+    Highest number of intervals active at the same instant inside [window_start, window_end).
+    Sweep line: +1 at each start, -1 at each end; ends sort before starts at the
+    same instant because intervals are half-open '[)'.
+    """
+    events = []
+    for start, end in intervals:
+        start, end = max(start, window_start), min(end, window_end)
+        if start < end:
+            events.append((start, 1))
+            events.append((end, -1))
+    events.sort()  # (time, -1) sorts before (time, +1)
+    peak = current = 0
+    for _, delta in events:
+        current += delta
+        peak = max(peak, current)
+    return peak
+
+
+def fits_capacity(interval, busy_intervals, capacity):
+    """Would adding `interval` keep the peak number of simultaneous breaks <= capacity?"""
+    start, end = interval
+    overlapping = [(s, e) for s, e in busy_intervals if s < end and e > start]
+    return peak_concurrency(overlapping, start, end) + 1 <= capacity
+
+
+def approved_intervals_overlapping(organisation_id, windows):
+    """
+    (start_at, end_at) of APPROVED breaks in the organisation that overlap ANY of the
+    given windows. ONE query, served by the partial GiST index from Step 5.
+    """
+    if not windows:
+        return []
+    overlaps_any = reduce(or_, (
+        Q(period__overlap=DateTimeTZRange(start, end, "[)")) for start, end in windows
+    ))
+    return list(
+        BreakRequest.objects
+        .filter(organisation_id=organisation_id, status=BreakRequest.Status.APPROVED)
+        .annotate(period=TsTzRange("start_at", "end_at", RangeBoundary()))
+        .filter(overlaps_any)
+        .values_list("start_at", "end_at")
+    )
+
+
+def lock_policy(organisation_id):
+    """
+    Lock the organisation's policy row. Every capacity decision in that organisation
+    happens while holding this lock, so they run one at a time (different orgs stay parallel).
+    """
+    policy, _ = BreakPolicy.objects.get_or_create(organisation_id=organisation_id)
+    return BreakPolicy.objects.select_for_update().get(pk=policy.pk)
 
 def _validate_against_policy(employee, policy, start_at, duration_minutes):
     # Rules 1 & 2: cheap checks that don't need the database.
@@ -88,13 +145,26 @@ def submit_break_request(*, employee, start_at, duration_minutes, client_request
                 if existing:
                     return existing, False
 
+
             policy, _ = BreakPolicy.objects.get_or_create(
                 organisation_id=employee.organisation_id
             )
+            if not policy.requires_approval:
+                # This submission will be approved immediately, so it takes the
+                # organisation lock (lock order: user row -> policy row).
+                policy = lock_policy(employee.organisation_id)
+
             _validate_against_policy(employee, policy, start_at, duration_minutes)
 
             auto_approve = not policy.requires_approval
-            # TODO (Step 11): auto-approved breaks must also respect max_concurrent_breaks.
+            if auto_approve:
+                end_at = start_at + timedelta(minutes=duration_minutes)
+                busy = approved_intervals_overlapping(employee.organisation_id, [(start_at, end_at)])
+                if not fits_capacity((start_at, end_at), busy, policy.max_concurrent_breaks):
+                    raise Conflict(
+                        "The maximum number of employees on break at that time has been reached."
+                    )
+
             break_request = BreakRequest(
                 organisation_id=employee.organisation_id,
                 employee=employee,
@@ -124,30 +194,46 @@ def review_break_requests(*, manager, ids, approve, note=""):
     Approve or reject PENDING requests belonging to the manager's organisation.
 
     Returns (processed_ids, skipped) where skipped maps id -> reason:
-      "not_found"                         - doesn't exist OR belongs to another org (no leak)
+      "not_found"                              - doesn't exist OR belongs to another org
       "already_approved" / "already_rejected"
+      "capacity_reached"                       - approving would exceed max_concurrent_breaks
     """
-    ids = list(dict.fromkeys(ids))  # remove duplicates, keep order
+    ids = list(dict.fromkeys(ids))
     new_status = BreakRequest.Status.APPROVED if approve else BreakRequest.Status.REJECTED
     now = timezone.now()
+    capacity_skipped = []
 
     with transaction.atomic():
-        # Lock the requested rows in a consistent order (by id) to avoid deadlocks.
+        # Lock order: policy (organisation) first, then break request rows by id.
+        policy = lock_policy(manager.organisation_id) if approve else None
+
         rows = list(
             BreakRequest.objects
-            .filter(organisation_id=manager.organisation_id, id__in=ids)  # tenant-scoped
+            .filter(organisation_id=manager.organisation_id, id__in=ids)
             .select_for_update()
             .order_by("id")
-            .values_list("id", "status")
+            .values_list("id", "status", "start_at", "end_at")
         )
-        current_status = dict(rows)
-        pending_ids = [pk for pk, st in rows if st == BreakRequest.Status.PENDING]
+        current_status = {pk: st for pk, st, _, _ in rows}
+        pending = [(pk, start, end) for pk, st, start, end in rows
+                   if st == BreakRequest.Status.PENDING]
 
-        # TODO (Step 11): when approving, enforce policy.max_concurrent_breaks here.
+        if approve and pending:
+            busy = approved_intervals_overlapping(
+                manager.organisation_id, [(start, end) for _, start, end in pending]
+            )
+            to_update = []
+            for pk, start, end in pending:  # id order = first come, first served
+                if fits_capacity((start, end), busy, policy.max_concurrent_breaks):
+                    to_update.append(pk)
+                    busy.append((start, end))  # later items in this batch must count it
+                else:
+                    capacity_skipped.append(pk)
+        else:
+            to_update = [pk for pk, _, _ in pending]
 
-        if pending_ids:
-            # ONE UPDATE for all rows. .update() skips save(), so set updated_at ourselves.
-            BreakRequest.objects.filter(id__in=pending_ids).update(
+        if to_update:
+            BreakRequest.objects.filter(id__in=to_update).update(
                 status=new_status,
                 reviewed_by=manager,
                 reviewed_at=now,
@@ -159,6 +245,8 @@ def review_break_requests(*, manager, ids, approve, note=""):
     for pk in ids:
         if pk not in current_status:
             skipped[pk] = "not_found"
+        elif pk in capacity_skipped:
+            skipped[pk] = "capacity_reached"
         elif current_status[pk] != BreakRequest.Status.PENDING:
             skipped[pk] = f"already_{current_status[pk].lower()}"
-    return pending_ids, skipped
+    return to_update, skipped

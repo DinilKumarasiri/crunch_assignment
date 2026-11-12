@@ -133,6 +133,12 @@ class ApprovalQueueView(TenantScopedQuerysetMixin, generics.ListAPIView):
     ordering = ["start_at"]  # default: soonest first
     queryset = BreakRequest.objects.select_related("employee").only(*QUEUE_FIELDS)
 
+REVIEW_ERRORS = {
+    "already_approved": "This request has already been approved.",
+    "already_rejected": "This request has already been rejected.",
+    "capacity_reached": "Approving this would exceed the maximum number of "
+                        "employees allowed on break at the same time.",
+}
 
 class ReviewBreakRequestView(APIView):
     """POST /api/break-requests/<id>/approve/ or /reject/"""
@@ -153,7 +159,7 @@ class ReviewBreakRequestView(APIView):
         if skipped.get(pk) == "not_found":
             raise NotFound("Break request not found.")
         if pk in skipped:
-            raise Conflict(f"This request is {skipped[pk].replace('_', ' ')}.")
+            raise Conflict(REVIEW_ERRORS[skipped[pk]])
 
         item = BreakRequest.objects.select_related("employee").only(*QUEUE_FIELDS).get(pk=pk)
         return Response(QueueItemSerializer(item).data)
