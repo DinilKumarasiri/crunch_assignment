@@ -23,5 +23,15 @@ services:
       db:
         condition: service_healthy   # don't start Django until Postgres passes its healthcheck
 
+  frontend:
+    build: ./frontend
+    volumes:
+      - ./frontend:/app        # live-sync your code (bind mount)
+      - /app/node_modules      # ...but keep the container's own node_modules
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
 volumes:
   pgdata:                         # a named volume that Docker manages
