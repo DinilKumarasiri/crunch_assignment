@@ -158,6 +158,7 @@ class BreakRequest(models.Model):
             # Screen 3 queue by status + Screen 4 register/stats (status=APPROVED)
             models.Index(
                 fields=["organisation", "status", "start_at"],
+                include=["duration_minutes", "employee", "break_date"],
                 name="breakreq_org_status_start_idx",
             ),
             # "Who is on break at time T" + max concurrent check, approved rows only

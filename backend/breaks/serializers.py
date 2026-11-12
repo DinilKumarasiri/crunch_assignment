@@ -1,6 +1,6 @@
 from rest_framework import serializers
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from django.utils import timezone
 
@@ -102,3 +102,29 @@ class BulkReviewSerializer(serializers.Serializer):
     )
     action = serializers.ChoiceField(choices=["approve", "reject"])
     note = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
+
+
+
+class OnBreakQuerySerializer(serializers.Serializer):
+    at = serializers.DateTimeField()  # "2026-11-20T10:30" is read in the project time zone
+
+
+class DateRangeQuerySerializer(serializers.Serializer):
+    """Optional date range. Defaults to the last 30 days, capped at 366 days."""
+
+    MAX_DAYS = 366
+
+    date_from = serializers.DateField(required=False)
+    date_to = serializers.DateField(required=False)
+
+    def validate(self, attrs):
+        date_to = attrs.get("date_to") or timezone.localdate()
+        date_from = attrs.get("date_from") or date_to - timedelta(days=29)
+        if date_from > date_to:
+            raise serializers.ValidationError({"date_from": "Must be on or before date_to."})
+        if (date_to - date_from).days >= self.MAX_DAYS:
+            raise serializers.ValidationError(
+                {"date_to": f"The range can be at most {self.MAX_DAYS} days."}
+            )
+        attrs["date_from"], attrs["date_to"] = date_from, date_to
+        return attrs

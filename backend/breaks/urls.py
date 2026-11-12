@@ -3,8 +3,12 @@ from django.urls import path
 from .views import (
     ApprovalQueueView,
     BreakPolicyView,
+    BreakRegisterView,
     BulkReviewView,
+    DailyStatsView,
     MyBreakRequestListCreateView,
+    OnBreakView,
+    RegisterSummaryView,
     ReviewBreakRequestView,
 )
 
@@ -17,4 +21,9 @@ urlpatterns = [
          ReviewBreakRequestView.as_view(review_action="approve"), name="approve"),
     path("break-requests/<int:pk>/reject/",
          ReviewBreakRequestView.as_view(review_action="reject"), name="reject"),
+
+    path("register/", BreakRegisterView.as_view(), name="register"),
+    path("register/summary/", RegisterSummaryView.as_view(), name="register-summary"),
+    path("register/on-break/", OnBreakView.as_view(), name="register-on-break"),
+    path("register/daily-stats/", DailyStatsView.as_view(), name="register-daily-stats"),
 ]
