@@ -1,9 +1,10 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useRef, useState } from 'react'
 import { useBulkReview, useQueue, useReviewBreak } from '../api/hooks'
 import Pagination from '../components/Pagination'
 import { StatusBadge } from '../components/ui'
 import { useUrlParams } from '../hooks/useUrlParams'
 import { formatDate, formatMinutes, formatTime } from '../utils/format'
+import SearchBox from '../components/SearchBox'
 
 const DEFAULTS = {
   status: 'PENDING', search: '', date_from: '', date_to: '',
@@ -179,25 +180,25 @@ export default function ApprovalQueuePage() {
 }
 
 // Debounce in the event handler: one URL update (one request) after typing pauses.
-function SearchBox({ initial, onSearch }) {
-  const [text, setText] = useState(initial)
-  const timer = useRef(null)
+// function SearchBox({ initial, onSearch }) {
+//   const [text, setText] = useState(initial)
+//   const timer = useRef(null)
 
-  useEffect(() => () => clearTimeout(timer.current), []) // cancel a pending timer on unmount
+//   useEffect(() => () => clearTimeout(timer.current), []) // cancel a pending timer on unmount
 
-  function handleChange(event) {
-    const value = event.target.value
-    setText(value)
-    clearTimeout(timer.current)
-    timer.current = setTimeout(() => onSearch(value.trim()), 300)
-  }
+//   function handleChange(event) {
+//     const value = event.target.value
+//     setText(value)
+//     clearTimeout(timer.current)
+//     timer.current = setTimeout(() => onSearch(value.trim()), 300)
+//   }
 
-  return (
-    <label>Search employee
-      <input type="search" value={text} onChange={handleChange} placeholder="Name or username" />
-    </label>
-  )
-}
+//   return (
+//     <label>Search employee
+//       <input type="search" value={text} onChange={handleChange} placeholder="Name or username" />
+//     </label>
+//   )
+// }
 
 function SortHeader({ field, label, ordering, onSort }) {
   const ascending = ordering === field

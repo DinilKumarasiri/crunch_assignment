@@ -27,3 +27,12 @@ export function formatMinutes(minutes) {
   const rest = minutes % 60
   return rest ? `${Math.floor(minutes / 60)} h ${rest} min` : `${minutes / 60} h`
 }
+
+const shortDateFormatter = new Intl.DateTimeFormat('en-GB', {
+  timeZone: APP_TIME_ZONE, day: 'numeric', month: 'short',
+})
+
+export const formatShortDate = (isoDay) => shortDateFormatter.format(new Date(`${isoDay}T12:00:00Z`))
+export const formatDateTime = (value) => `${formatDate(value)} ${formatTime(value)}`
+// Value for <input type="datetime-local"> meaning "now" in the app's time zone.
+export const nowLocalInput = () => `${isoDate(0)}T${formatTime(new Date())}`

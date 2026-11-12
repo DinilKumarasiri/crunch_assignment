@@ -1,4 +1,4 @@
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './client'
 
 // Query keys in one place: the same key always means the same cached data.
@@ -6,6 +6,10 @@ export const queryKeys = {
   policy: ['policy'],
   myBreaks: (params) => ['my-breaks', params],
   queue: (params) => ['queue', params],
+  registerList: (params) => ['register', 'list', params],
+  registerSummary: (params) => ['register', 'summary', params],
+  dailyStats: (params) => ['register', 'daily', params],
+  onBreak: (at) => ['register', 'on-break', at],
 }
 
 export function usePolicy() {
@@ -74,5 +78,43 @@ export function useBulkReview() {
     mutationFn: ({ ids, action, note }) =>
       api('/break-requests/bulk-review/', { method: 'POST', body: { ids, action, note } }),
     onSettled: refresh,
+  })
+}
+
+
+export function useRegisterList(params) {
+  return useInfiniteQuery({
+    queryKey: queryKeys.registerList(params),
+    queryFn: ({ pageParam, signal }) =>
+      api('/register/', { params: { ...params, cursor: pageParam, page_size: 25 }, signal }),
+    initialPageParam: '',
+    // The API gives a full `next` URL; we only need its opaque cursor value.
+    getNextPageParam: (lastPage) =>
+      lastPage.next ? new URL(lastPage.next).searchParams.get('cursor') : undefined,
+    placeholderData: keepPreviousData,
+  })
+}
+
+export function useRegisterSummary(params) {
+  return useQuery({
+    queryKey: queryKeys.registerSummary(params),
+    queryFn: ({ signal }) => api('/register/summary/', { params, signal }),
+    placeholderData: keepPreviousData,
+  })
+}
+
+export function useDailyStats(params) {
+  return useQuery({
+    queryKey: queryKeys.dailyStats(params),
+    queryFn: ({ signal }) => api('/register/daily-stats/', { params, signal }),
+    placeholderData: keepPreviousData,
+  })
+}
+
+export function useOnBreak(at) {
+  return useQuery({
+    queryKey: queryKeys.onBreak(at),
+    queryFn: ({ signal }) => api('/register/on-break/', { params: { at }, signal }),
+    enabled: Boolean(at), // don't call the API until a time is chosen
   })
 }

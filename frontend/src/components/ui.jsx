@@ -7,3 +7,13 @@ export function FieldError({ message }) {
   if (!message) return null
   return <span className="error">{Array.isArray(message) ? message.join(' ') : message}</span>
 }
+
+
+export function Stat({ label, value }) {
+  return (
+    <div className="card stat">
+      <span className="muted small">{label}</span>
+      <strong>{value ?? '—'}</strong>
+    </div>
+  )
+}
