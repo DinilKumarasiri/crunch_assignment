@@ -7,7 +7,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('accounts', '0004_user_user_first_name_trgm_user_user_last_name_trgm_and_more'),
+        ('accounts', '0003_user_name_trigram_indexes'),
         ('breaks', '0004_breakpolicy_version'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]

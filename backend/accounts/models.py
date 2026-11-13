@@ -2,8 +2,8 @@ from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.db.models import Q
 
-from django.contrib.postgres.indexes import GinIndex, OpClass
-from django.db.models.functions import Upper
+# from django.contrib.postgres.indexes import GinIndex, OpClass
+# from django.db.models.functions import Upper
 
 
 class Organisation(models.Model):
@@ -44,9 +44,9 @@ class User(AbstractUser):
         indexes = [
             models.Index(fields=["organisation", "role"], name="user_org_role_idx"),
             # Trigram indexes: fast case-insensitive "contains" search on names
-            GinIndex(OpClass(Upper("first_name"), name="gin_trgm_ops"), name="user_first_name_trgm"),
-            GinIndex(OpClass(Upper("last_name"), name="gin_trgm_ops"), name="user_last_name_trgm"),
-            GinIndex(OpClass(Upper("username"), name="gin_trgm_ops"), name="user_username_trgm"),
+            # GinIndex(OpClass(Upper("first_name"), name="gin_trgm_ops"), name="user_first_name_trgm"),
+            # GinIndex(OpClass(Upper("last_name"), name="gin_trgm_ops"), name="user_last_name_trgm"),
+            # GinIndex(OpClass(Upper("username"), name="gin_trgm_ops"), name="user_username_trgm"),
         ]
         constraints = [
             models.CheckConstraint(
