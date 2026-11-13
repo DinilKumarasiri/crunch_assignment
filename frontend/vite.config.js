@@ -14,4 +14,7 @@ export default defineConfig({
       '/api': { target: 'http://backend:8000' },
     },
   },
+  test: {
+    environment: 'jsdom', // a simulated browser (window, sessionStorage) for tests
+  },
 })
