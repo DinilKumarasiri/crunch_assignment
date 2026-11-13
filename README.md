@@ -20,7 +20,12 @@ docker compose up -d --build              # migrations run automatically
 docker compose exec backend python manage.py migrate
 docker compose exec backend python manage.py seed_demo
 docker compose exec backend python manage.py generate_data
-docker compose exec backend python scripts/try_queue.py # use to generate dummy break requests from employee
+docker compose exec backend python scripts/try_auth.py       # login, JWT, roles, tenant isolation
+docker compose exec backend python scripts/try_policy.py     # policy validation + optimistic locking
+docker compose exec backend python scripts/try_breaks.py     # submission rules, idempotency, parallel races
+docker compose exec backend python scripts/try_queue.py      # queue search/sort, approve/reject, bulk, N+1
+docker compose exec backend python scripts/try_register.py   # register, summary, on-break, daily stats
+docker compose exec backend python scripts/try_capacity.py   # max-on-break limit under concurrency
 ```
 
 Open **http://localhost:5173**
