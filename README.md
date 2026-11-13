@@ -17,7 +17,9 @@ git clone https://github.com/DinilKumarasiri/crunch_assignment.git
 cd break-management
 cp .env.example .env
 docker compose up -d --build              # migrations run automatically
+docker compose exec backend python manage.py migrate
 docker compose exec backend python manage.py seed_demo
+docker compose exec backend python manage.py generate_data
 ```
 
 Open **http://localhost:5173**
