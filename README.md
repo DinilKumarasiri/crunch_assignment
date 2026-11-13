@@ -1,6 +1,6 @@
 # Multi-Tenant Break Management System
 
-![tests](https://github.com/YOUR_GITHUB_USERNAME/break-management/actions/workflows/tests.yml/badge.svg)
+![tests](https://github.com/DinilKumarasiri/break-management/actions/workflows/tests.yml/badge.svg)
 
 Employee break management for multiple organisations: managers configure break policies and approve
 requests; employees request breaks and track their status. Built for performance, concurrency safety
@@ -13,7 +13,7 @@ and tenant isolation at scale (1M+ break requests).
 Requirements: Docker Desktop (4 GB+ memory recommended).
 
 ```bash
-git clone https://github.com/YOUR_GITHUB_USERNAME/break-management.git
+git clone https://github.com/DinilKumarasiri/crunch_assignment.git
 cd break-management
 cp .env.example .env
 docker compose up -d --build              # migrations run automatically
