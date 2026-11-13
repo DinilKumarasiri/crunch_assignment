@@ -20,6 +20,7 @@ docker compose up -d --build              # migrations run automatically
 docker compose exec backend python manage.py migrate
 docker compose exec backend python manage.py seed_demo
 docker compose exec backend python manage.py generate_data
+docker compose exec backend python scripts/try_queue.py # use to generate dummy break requests from employee
 ```
 
 Open **http://localhost:5173**
