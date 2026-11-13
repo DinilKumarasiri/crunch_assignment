@@ -2,6 +2,15 @@ services:
   db:
     image: postgres:16            # official Postgres image from Docker Hub
     env_file: .env                # Postgres reads POSTGRES_DB/USER/PASSWORD to set itself up
+    command: >
+      postgres
+      -c shared_buffers=256MB
+      -c effective_cache_size=1GB
+      -c work_mem=8MB
+      -c maintenance_work_mem=256MB
+      -c random_page_cost=1.1
+      -c max_connections=100
+    shm_size: 256mb
     volumes:
       - pgdata:/var/lib/postgresql/data   # keep DB data even if the container is deleted
     ports:

@@ -43,7 +43,6 @@ class User(AbstractUser):
     class Meta(AbstractUser.Meta):
         indexes = [
             models.Index(fields=["organisation", "role"], name="user_org_role_idx"),
-
             # Trigram indexes: fast case-insensitive "contains" search on names
             GinIndex(OpClass(Upper("first_name"), name="gin_trgm_ops"), name="user_first_name_trgm"),
             GinIndex(OpClass(Upper("last_name"), name="gin_trgm_ops"), name="user_last_name_trgm"),

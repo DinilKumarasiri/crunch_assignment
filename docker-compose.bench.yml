@@ -1,0 +1,22 @@
+# Benchmark mode: Gunicorn + DEBUG off, plus a Locust load generator.
+#   docker compose -f docker-compose.yml -f docker-compose.bench.yml up -d --build db backend
+services:
+  backend:
+    command: >
+      gunicorn config.wsgi:application
+      --bind 0.0.0.0:8000
+      --workers ${GUNICORN_WORKERS:-4}
+      --threads ${GUNICORN_THREADS:-4}
+      --worker-class gthread
+      --timeout 60
+    environment:
+      DJANGO_DEBUG: "0"
+      DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1,backend"
+
+  locust:
+    image: locustio/locust
+    working_dir: /mnt/locust
+    volumes:
+      - ./benchmarks:/mnt/locust
+    depends_on:
+      - backend
