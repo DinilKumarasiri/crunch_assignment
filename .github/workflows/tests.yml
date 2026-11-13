@@ -49,8 +49,13 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: frontend/package-lock.json     
       - run: npm ci
+      # npm optional-dependency bug (npm/cli#4828): the lock file is created on Alpine (musl),
+      # so add the Ubuntu (glibc) native binary that rolldown needs, matching its exact version.
+      - run: |
+          ROLLDOWN_VERSION=$(node -p "require('./node_modules/rolldown/package.json').version")
+          npm install --no-save "@rolldown/binding-linux-x64-gnu@${ROLLDOWN_VERSION}"
       - run: npm test
       - run: npm run build
 
